@@ -1,0 +1,10 @@
+[package]
+name = "niri-action"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+niri-ipc = "25.5.1"
+clap = "2"
+failure = "0.1.8"
+shellexpand = "2.0.0"
