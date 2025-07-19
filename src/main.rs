@@ -24,7 +24,7 @@ fn main() -> Result<(), Error> {
     let matches = App::new("niri-action")
         .version("v0.1.7")
         .author("Rouven Czerwinski <rouven@czerwinskis.de>")
-        .about("Provides selections of sway $things via fuzzel")
+        .about("Provides selections of niri $things via fuzzel")
         .setting(AppSettings::ArgRequiredElseHelp)
         .setting(AppSettings::TrailingVarArg)
         .subcommand(
