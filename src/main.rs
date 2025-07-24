@@ -17,7 +17,30 @@ enum NiriIPCError {
 }
 
 struct ApplicationState<'a> {
-    conn: &'a mut niri_ipc::socket::Socket,
+    socket: &'a mut niri_ipc::socket::Socket,
+}
+
+trait QueryRun {
+    fn query(&mut self, request: niri_ipc::Request) -> Result<Option<niri_ipc::Response>, Error>;
+    fn run_action(&mut self, request: niri_ipc::Request) -> Result<(), Error>;
+}
+
+impl QueryRun for niri_ipc::socket::Socket {
+    fn query(&mut self, request: niri_ipc::Request) -> Result<Option<niri_ipc::Response>, Error> {
+        match self.send(request)? {
+            Ok(niri_ipc::Response::Handled) => return Ok(None),
+            Ok(x) => return Ok(Some(x)),
+            Err(err) => Err(NiriIPCError::UnhandledError { err })?,
+        }
+    }
+
+    fn run_action(&mut self, request: niri_ipc::Request) -> Result<(), Error> {
+        match self.send(request)? {
+            Ok(niri_ipc::Response::Handled) => return Ok(()),
+            Ok(x) => Err(NiriIPCError::UnhandledError { err: format!("Got result for {:?}", x).to_string() })?,
+            Err(err) => Err(NiriIPCError::UnhandledError { err })?,
+        }
+    }
 }
 
 fn main() -> Result<(), Error> {
@@ -53,7 +76,7 @@ fn main() -> Result<(), Error> {
 
     // establish a connection to i3 over a unix socket
     let mut state = ApplicationState {
-        conn: &mut niri_ipc::socket::Socket::connect()?,
+        socket: &mut niri_ipc::socket::Socket::connect()?,
     };
 
     match matches.subcommand_name() {
@@ -66,91 +89,68 @@ fn main() -> Result<(), Error> {
     }
 }
 
-fn run_niri_query(conn: &mut niri_ipc::socket::Socket, request: niri_ipc::Request) -> Result<Option<niri_ipc::Response>, Error> {
-    match conn.send(request)? {
-        Ok(niri_ipc::Response::Handled) => return Ok(None),
-        Ok(x) => return Ok(Some(x)),
-        Err(err) => Err(NiriIPCError::UnhandledError { err })?,
-    }
-}
-
 fn focus_container_by_id(state: &mut ApplicationState) -> Result<(), Error> {
-    let windows = get_windows(&mut state.conn)?;
+    let windows = get_windows(&mut state.socket)?;
 
     let id = fuzzel_get_selection_id(&windows).parse::<u64>()?;
-    match run_niri_query(state.conn, Request::Action(Action::FocusWindow { id: id }))? {
-        Some(_) => Ok(()),
-        None => Ok(()),
-    }
+    return state.socket.run_action(Request::Action(Action::FocusWindow { id: id }))
 }
 
 fn steal_container_by_id(state: &mut ApplicationState) -> Result<(), Error> {
-    let windows = get_windows(&mut state.conn)?;
-    let ws = get_current_workspace(&mut state.conn)?;
+    let windows = get_windows(&mut state.socket)?;
+    let ws = get_current_workspace(&mut state.socket)?;
 
     let id = fuzzel_get_selection_id(&windows).parse::<u64>()?;
-    match run_niri_query(state.conn, Request::Action(Action::MoveWindowToWorkspace { window_id: Some(id), reference: niri_ipc::WorkspaceReferenceArg::Id(ws), focus: false } ))? {
-        Some(_) => Ok(()),
-        None => Ok(()),
-    }
+    return state.socket.run_action(Request::Action(Action::MoveWindowToWorkspace { window_id: Some(id), reference: niri_ipc::WorkspaceReferenceArg::Id(ws), focus: false } ))
 }
 
 fn focus_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
-    let work_names = get_workspaces(&mut state.conn)?;
+    let work_names = get_workspaces(&mut state.socket)?;
 
     let id = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
 
-    match run_niri_query(state.conn, Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))? {
-        Some(_) => Ok(()),
-        None => Ok(()),
-    }
+    return state.socket.run_action(Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))
 }
 
 fn move_to_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
-    let work_names = get_workspaces(&mut state.conn)?;
+    let work_names = get_workspaces(&mut state.socket)?;
 
     let space = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
-    match run_niri_query(state.conn, Request::Action(Action::MoveWindowToWorkspace { window_id: None, reference: niri_ipc::WorkspaceReferenceArg::Id(space), focus: false } ))? {
-        Some(_) => Ok(()),
-        None => Ok(()),
-    }
+    return state.socket.run_action(Request::Action(Action::MoveWindowToWorkspace { window_id: None, reference: niri_ipc::WorkspaceReferenceArg::Id(space), focus: false } ))
 }
 
 fn move_workspace_to_output(state: &mut ApplicationState) -> Result<(), Error> {
-    let outputs = get_outputs(&mut state.conn)?;
+    let outputs = get_outputs(&mut state.socket)?;
     let output = fuzzel_get_selection_id(&outputs);
-    match run_niri_query(state.conn, Request::Action(Action::MoveWorkspaceToMonitor { output: output, reference: None }))? {
-        Some(_) => Ok(()),
-        None => Ok(()),
-    }
+    return state.socket.run_action(Request::Action(Action::MoveWorkspaceToMonitor { output: output, reference: None }))
 }
 
-fn get_outputs(conn: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
-    match run_niri_query(conn, Request::Outputs)? {
+fn get_outputs(socket: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
+    match socket.query(Request::Outputs)? {
         Some( Response::Outputs(s) ) => return Ok(s.values().map(|x| format!("{}: {} {} {}", x.name, x.make, x.model, x.serial.clone().unwrap_or("<unknown>".to_string())).to_string()).collect()),
         None => return Ok(Vec::new()),
         _ => return Ok(Vec::new())
     };
 }
 
-fn get_windows(conn: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
-    match run_niri_query(conn, Request::Windows)? {
+fn get_windows(socket: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
+    match socket.query(Request::Windows)? {
         Some( Response::Windows(s) ) => return Ok(s.iter().map(|x| format!("{}: {}", x.id, x.title.clone().unwrap_or("Unknown".to_string()))).collect()),
         None => return Ok(Vec::new()),
         _ => return Ok(Vec::new())
     };
 }
 
-fn get_workspaces(conn: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
-    match run_niri_query(conn, Request::Workspaces)? {
+fn get_workspaces(socket: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
+    match socket.query(Request::Workspaces)? {
         Some( Response::Workspaces(s) ) => return Ok(s.iter().map(|x| format!("{}: {} ({})", x.id, x.name.clone().unwrap_or("<unnamed>".to_string()), x.idx)).collect()),
         None => return Ok(Vec::new()),
         _ => return Ok(Vec::new())
     };
 }
 
-fn get_current_workspace(conn: &mut niri_ipc::socket::Socket) -> Result<u64, Error> {
-    match run_niri_query(conn, Request::Workspaces)? {
+fn get_current_workspace(socket: &mut niri_ipc::socket::Socket) -> Result<u64, Error> {
+    match socket.query(Request::Workspaces)? {
         Some( Response::Workspaces(s) ) => return Ok(s.into_iter().filter(|x| x.is_focused == true).next().unwrap().id),
         None => return Ok(0),
         _ => return Ok(0),
