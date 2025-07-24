@@ -98,9 +98,9 @@ fn steal_container_by_id(state: &mut ApplicationState) -> Result<(), Error> {
 fn focus_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
     let work_names = get_workspaces(&mut state.conn)?;
 
-    let id = fuzzel_get_selection_id(&work_names).parse::<u8>()?;
+    let id = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
 
-    match run_niri_query(state.conn, Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Index(id) }))? {
+    match run_niri_query(state.conn, Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))? {
         Some(_) => Ok(()),
         None => Ok(()),
     }
@@ -109,8 +109,8 @@ fn focus_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
 fn move_to_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
     let work_names = get_workspaces(&mut state.conn)?;
 
-    let space = fuzzel_get_selection_id(&work_names).parse::<u8>()?;
-    match run_niri_query(state.conn, Request::Action(Action::MoveWindowToWorkspace { window_id: None, reference: niri_ipc::WorkspaceReferenceArg::Index(space), focus: false } ))? {
+    let space = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
+    match run_niri_query(state.conn, Request::Action(Action::MoveWindowToWorkspace { window_id: None, reference: niri_ipc::WorkspaceReferenceArg::Id(space), focus: false } ))? {
         Some(_) => Ok(()),
         None => Ok(()),
     }
@@ -143,7 +143,7 @@ fn get_windows(conn: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error
 
 fn get_workspaces(conn: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
     match run_niri_query(conn, Request::Workspaces)? {
-        Some( Response::Workspaces(s) ) => return Ok(s.iter().map(|x| format!("{}: {}", x.idx, x.name.clone().unwrap_or("<none>".to_string()))).collect()),
+        Some( Response::Workspaces(s) ) => return Ok(s.iter().map(|x| format!("{}: {} ({})", x.id, x.name.clone().unwrap_or("<unnamed>".to_string()), x.idx)).collect()),
         None => return Ok(Vec::new()),
         _ => return Ok(Vec::new())
     };
