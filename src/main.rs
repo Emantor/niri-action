@@ -80,49 +80,51 @@ fn main() -> Result<(), Error> {
     };
 
     match matches.subcommand_name() {
-        Some("focus-container") => focus_container_by_id(&mut state),
-        Some("steal-container") => steal_container_by_id(&mut state),
-        Some("focus-workspace") => focus_workspace_by_name(&mut state),
-        Some("move-to-workspace") => move_to_workspace_by_name(&mut state),
-        Some("move-workspace-to-output") => move_workspace_to_output(&mut state),
+        Some("focus-container") => state.focus_container_by_id(),
+        Some("steal-container") => state.steal_container_by_id(),
+        Some("focus-workspace") => state.focus_workspace_by_name(),
+        Some("move-to-workspace") => state.move_to_workspace_by_name(),
+        Some("move-workspace-to-output") => state.move_workspace_to_output(),
         _ => Ok({}),
     }
 }
 
-fn focus_container_by_id(state: &mut ApplicationState) -> Result<(), Error> {
-    let windows = get_windows(&mut state.socket)?;
+impl ApplicationState<'_> {
+    fn focus_container_by_id(&mut self) -> Result<(), Error> {
+        let windows = get_windows(&mut self.socket)?;
 
-    let id = fuzzel_get_selection_id(&windows).parse::<u64>()?;
-    return state.socket.run_action(Request::Action(Action::FocusWindow { id: id }))
-}
+        let id = fuzzel_get_selection_id(&windows).parse::<u64>()?;
+        return self.socket.run_action(Request::Action(Action::FocusWindow { id: id }))
+    }
 
-fn steal_container_by_id(state: &mut ApplicationState) -> Result<(), Error> {
-    let windows = get_windows(&mut state.socket)?;
-    let ws = get_current_workspace(&mut state.socket)?;
+    fn steal_container_by_id(&mut self) -> Result<(), Error> {
+        let windows = get_windows(&mut self.socket)?;
+        let ws = get_current_workspace(&mut self.socket)?;
 
-    let id = fuzzel_get_selection_id(&windows).parse::<u64>()?;
-    return state.socket.run_action(Request::Action(Action::MoveWindowToWorkspace { window_id: Some(id), reference: niri_ipc::WorkspaceReferenceArg::Id(ws), focus: false } ))
-}
+        let id = fuzzel_get_selection_id(&windows).parse::<u64>()?;
+        return self.socket.run_action(Request::Action(Action::MoveWindowToWorkspace { window_id: Some(id), reference: niri_ipc::WorkspaceReferenceArg::Id(ws), focus: false } ))
+    }
 
-fn focus_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
-    let work_names = get_workspaces(&mut state.socket)?;
+    fn focus_workspace_by_name(&mut self) -> Result<(), Error> {
+        let work_names = get_workspaces(&mut self.socket)?;
 
-    let id = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
+        let id = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
 
-    return state.socket.run_action(Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))
-}
+        return self.socket.run_action(Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))
+    }
 
-fn move_to_workspace_by_name(state: &mut ApplicationState) -> Result<(), Error> {
-    let work_names = get_workspaces(&mut state.socket)?;
+    fn move_to_workspace_by_name(&mut self) -> Result<(), Error> {
+        let work_names = get_workspaces(&mut self.socket)?;
 
-    let space = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
-    return state.socket.run_action(Request::Action(Action::MoveWindowToWorkspace { window_id: None, reference: niri_ipc::WorkspaceReferenceArg::Id(space), focus: false } ))
-}
+        let space = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
+        return self.socket.run_action(Request::Action(Action::MoveWindowToWorkspace { window_id: None, reference: niri_ipc::WorkspaceReferenceArg::Id(space), focus: false } ))
+    }
 
-fn move_workspace_to_output(state: &mut ApplicationState) -> Result<(), Error> {
-    let outputs = get_outputs(&mut state.socket)?;
-    let output = fuzzel_get_selection_id(&outputs);
-    return state.socket.run_action(Request::Action(Action::MoveWorkspaceToMonitor { output: output, reference: None }))
+    fn move_workspace_to_output(&mut self) -> Result<(), Error> {
+        let outputs = get_outputs(&mut self.socket)?;
+        let output = fuzzel_get_selection_id(&outputs);
+        return self.socket.run_action(Request::Action(Action::MoveWorkspaceToMonitor { output: output, reference: None }))
+    }
 }
 
 fn get_outputs(socket: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
