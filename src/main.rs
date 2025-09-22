@@ -145,7 +145,12 @@ fn get_windows(socket: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Err
 
 fn get_workspaces(socket: &mut niri_ipc::socket::Socket) -> Result<Vec<String>, Error> {
     match socket.query(Request::Workspaces)? {
-        Some( Response::Workspaces(s) ) => return Ok(s.iter().map(|x| format!("{}: {} ({})", x.id, x.name.clone().unwrap_or("<unnamed>".to_string()), x.idx)).collect()),
+        Some( Response::Workspaces(s) ) => {
+            let mut si = s.clone();
+            si.sort_by(|a, b| a.idx.cmp(&b.idx));
+            let spaces = si.iter().map(|x| format!("{}: {} ({})", x.id, x.name.clone().unwrap_or("<unnamed>".to_string()), x.idx)).collect();
+            return Ok(spaces)
+        },
         None => return Ok(Vec::new()),
         _ => return Ok(Vec::new())
     };
