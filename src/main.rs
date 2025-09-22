@@ -108,9 +108,21 @@ impl ApplicationState<'_> {
     fn focus_workspace_by_name(&mut self) -> Result<(), Error> {
         let work_names = get_workspaces(&mut self.socket)?;
 
-        let id = fuzzel_get_selection_id(&work_names).parse::<u64>()?;
 
-        return self.socket.run_action(Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))
+        let ws = fuzzel_get_selection_id_or_entry(&work_names);
+        println!("{ws:?} for {work_names:?}");
+        match work_names.contains(&ws) {
+            true => {
+                let id = ws.parse::<u64>()?;
+
+                return self.socket.run_action(Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))
+            }
+            false => {
+                let id = work_names.last().expect("No workspaces").split(":").next().expect("Can't split out id").to_string().parse::<u64>()?;
+                self.socket.run_action(Request::Action(Action::FocusWorkspace { reference: niri_ipc::WorkspaceReferenceArg::Id(id) }))?;
+                self.socket.run_action(Request::Action(Action::SetWorkspaceName { name: ws, workspace: Some(niri_ipc::WorkspaceReferenceArg::Id(id)) }))
+            }
+        }
     }
 
     fn move_to_workspace_by_name(&mut self) -> Result<(), Error> {
@@ -171,6 +183,18 @@ fn fuzzel_get_selection_id(input: &Vec<String>) -> String {
         .next()
         .expect("Can't split out id")
         .to_string()
+}
+
+fn fuzzel_get_selection_id_or_entry(input: &Vec<String>) -> String {
+    let fuzzel_out = fuzzel_run(&input);
+    match fuzzel_out.contains(":") {
+        true => return fuzzel_out
+            .split(":")
+            .next()
+            .expect("Can't split out id")
+            .to_string(),
+        false => return fuzzel_out.strip_suffix('\n').expect("Failed to strip newline").to_string()
+    };
 }
 
 fn fuzzel_run(input: &Vec<String>) -> String {
