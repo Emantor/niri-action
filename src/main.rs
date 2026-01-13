@@ -152,9 +152,6 @@ impl ApplicationState<'_> {
         let matches = matches.subcommand_matches("workspace-exec").unwrap();
         let mapping_path = self.confdir.join("mapping");
         let workspace = get_current_workspace_name(self.socket)?;
-        if workspace.is_empty() {
-            return Ok(())
-        }
         let map = std::fs::read_to_string(mapping_path)?
             .lines()
             .map(|s| s.split(": "))
@@ -166,7 +163,7 @@ impl ApplicationState<'_> {
                 acc
             });
 
-        let dir = match map.get(&workspace[..]) {
+        let mut dir = match map.get(&workspace[..]) {
             Some(s) => tilde(&s).to_string(),
             None => tilde("~").to_string(),
         };
@@ -174,10 +171,9 @@ impl ApplicationState<'_> {
         let path = Path::new(&dir);
 
         if !path.exists() {
-            return Ok(());
+            dir = tilde("~").to_string();
         }
 
-        println!("Switching to {dir}");
         set_current_dir(dir)?;
         let args = matches
             .values_of("args").ok_or(NiriIPCError::UnhandledError { err: "No args found".to_string() })?;
